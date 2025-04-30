@@ -1,0 +1,49 @@
+//@version=6
+indicator("RSI + BB %B + HA Color Change", overlay=false)
+
+// === RSI Inputs ===
+rsiLength = input.int(14, title="RSI Length")
+rsiSource = input.source(close, title="RSI Source")
+rsiOverbought = input.int(70, title="RSI Overbought")
+rsiOversold = input.int(30, title="RSI Oversold")
+
+// === Bollinger Bands %B Inputs ===
+bbLength = input.int(20, title="Bollinger Bands Length")
+bbSource = input.source(close, title="Bollinger Bands Source")
+bbMultiplier = input.float(2.0, title="Bollinger Bands Multiplier")
+
+// === RSI Calculation ===
+rsiValue = ta.rsi(rsiSource, rsiLength)
+
+// === Bollinger Bands Calculation ===
+basis = ta.sma(bbSource, bbLength)
+dev = bbMultiplier * ta.stdev(bbSource, bbLength)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// === Bollinger Bands %B Calculation ===
+bbPercentB = (bbSource - lowerBB) / (upperBB - lowerBB)
+
+// === Heikin Ashi Candle Logic ===
+haClose = (open + high + low + close) / 4
+var float haOpen = na
+haOpen := na(haOpen[1]) ? (open + close) / 2 : (haOpen[1] + haClose[1]) / 2
+haBullish = haClose > haOpen
+haBearish = haClose < haOpen
+haChangeToBull = haBullish and not haBullish[1]
+haChangeToBear = haBearish and not haBearish[1]
+
+// === Plotting RSI and %B ===
+plot(rsiValue, color=color.rgb(157, 30, 241), title="RSI", linewidth=1)
+hline(rsiOverbought, "Overbought", color=color.red, linestyle=hline.style_dashed)
+hline(rsiOversold, "Oversold", color=color.green, linestyle=hline.style_dashed)
+plot(bbPercentB * 100, color=color.rgb(20, 107, 179, 41), title="Bollinger Bands %B", linewidth=1)
+hline(50, "%B Midline", color=color.gray, linestyle=hline.style_dotted)
+
+// === HA Color Change Markers (Directional) ===
+plotshape(haChangeToBull, title="HA to Bullish", location=location.bottom, style=shape.triangleup, size=size.small, color=color.green)
+plotshape(haChangeToBear, title="HA to Bearish", location=location.top, style=shape.triangledown, size=size.small, color=color.red)
+
+// === RSI Background Highlights ===
+bgcolor(rsiValue > rsiOverbought ? color.new(color.red, 85) : na, title="RSI Overbought BG")
+bgcolor(rsiValue < rsiOversold ? color.new(color.green, 85) : na, title="RSI Oversold BG")

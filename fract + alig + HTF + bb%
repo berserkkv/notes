@@ -1,0 +1,107 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © nurshat1421 + modified by ChatGPT
+
+//@version=6
+indicator("Williams Fractals + Alligator + HTF High/Low + BB%", overlay=true)
+
+// === Alligator Inputs ===
+jawLength = input.int(13, title="Jaw Length")
+teethLength = input.int(8, title="Teeth Length")
+lipsLength = input.int(5, title="Lips Length")
+
+jawOffset = input.int(8, title="Jaw Offset")
+teethOffset = input.int(5, title="Teeth Offset")
+lipsOffset = input.int(3, title="Lips Offset")
+
+// === Fractal Input ===
+fractalDepth = input.int(2, minval=1, title="Fractal Depth")
+
+// === Alligator (SMMA) ===
+price = hl2
+jawBase = ta.rma(price, jawLength)
+teethBase = ta.rma(price, teethLength)
+lipsBase = ta.rma(price, lipsLength)
+
+jaw = jawBase[jawOffset]
+teeth = teethBase[teethOffset]
+lips = lipsBase[lipsOffset]
+
+plot(jaw, color=color.blue, title="Jaw (SMMA)", offset=-jawOffset)
+plot(teeth, color=color.red, title="Teeth (SMMA)", offset=-teethOffset)
+plot(lips, color=color.green, title="Lips (SMMA)", offset=-lipsOffset)
+
+// === Fractal Logic ===
+isUpFractal = true
+isDownFractal = true
+for i = 1 to fractalDepth
+    isUpFractal := isUpFractal and high[fractalDepth] > high[fractalDepth - i] and high[fractalDepth] > high[fractalDepth + i]
+    isDownFractal := isDownFractal and low[fractalDepth] < low[fractalDepth - i] and low[fractalDepth] < low[fractalDepth + i]
+
+// === Alligator values at fractal bar ===
+jawF = jawBase[fractalDepth + jawOffset]
+teethF = teethBase[fractalDepth + teethOffset]
+lipsF = lipsBase[fractalDepth + lipsOffset]
+highF = high[fractalDepth]
+lowF = low[fractalDepth]
+
+// === Reversed Fractal Conditions ===
+showBullish = isUpFractal and jawF < teethF and teethF < lipsF and lipsF < lowF
+showBearish = isDownFractal and jawF > teethF and teethF > lipsF and jawF > highF
+
+plotshape(showBullish, title="Reversed Bullish Fractal", location=location.abovebar, color=color.red, style=shape.triangledown, offset=-fractalDepth)
+plotshape(showBearish, title="Reversed Bearish Fractal", location=location.belowbar, color=color.green, style=shape.triangleup, offset=-fractalDepth)
+
+// === HTF High/Low ===
+res = input.timeframe("D", title="Timeframe")
+rp_security(_symbol, _res, _src) => request.security(_symbol, _res, _src[barstate.isrealtime ? 1 : 0])
+htfHigh = rp_security(syminfo.tickerid, res, high)
+htfLow = rp_security(syminfo.tickerid, res, low)
+plot(htfHigh, color=color.red, title="HTF High")
+plot(htfLow, color=color.blue, title="HTF Low")
+alertcondition(close > htfHigh or close < htfLow, title="HTF Breakout Alert!", message="HTF Breakout Alert For: {{ticker}}")
+
+// === Signal BB% OCCA ===
+haOpen = request.security(syminfo.tickerid, "15", open[1])
+haHigh = request.security(syminfo.tickerid, "15", high)
+haLow = request.security(syminfo.tickerid, "15", low)
+haClose = request.security(syminfo.tickerid, "15", close)
+
+greenHA = haClose > haOpen
+redHA = haClose < haOpen
+
+length = input.int(20, title="LSMA Length")
+offset = input.int(8, title="LSMA Offset")
+src = input.source(low, title="LSMA Source")
+lsma = ta.linreg(src, length, offset)
+
+length0 = input.int(200, title="BB Length")
+src0 = input.source(close, title="BB Source")
+mult = input.float(1.0, minval=0.001, maxval=50, title="StdDev Multiplier")
+basis = ta.sma(src0, length0)
+dev = mult * ta.stdev(src0, length0)
+upper = basis + dev
+lower = basis - dev
+bbr = (src - lower) / (upper - lower)
+
+buy = haClose > lsma and greenHA and bbr <= 0 and haClose[1] < lsma and haOpen[1] < lsma
+sell = haClose < lsma and redHA and bbr >= 1 and haClose[1] > lsma and haOpen[1] > lsma
+
+emaLength1 = input.int(100, title='EMA 1 Length')
+emaLength2 = input.int(200, title='EMA 2 Length')
+emaLength3 = input.int(400, title='EMA 3 Length')
+
+ema1 = ta.ema(close, emaLength1)
+ema2 = ta.ema(close, emaLength2)
+ema3 = ta.ema(close, emaLength3)
+
+plot(ema1, color=color.purple, title="EMA 100")
+plot(ema2, color=color.red, title="EMA 200")
+plot(ema3, color=color.white, title="EMA 400")
+
+plot(lsma, title="LSMA", color=color.orange)
+
+plotshape(series=buy, title="Buy Signal", location=location.belowbar, color=color.green, style=shape.triangleup, text="BUY")
+plotshape(series=sell, title="Sell Signal", location=location.abovebar, color=color.red, style=shape.triangledown, text="SELL")
+
+alertcondition(buy, title="Buy Signal", message='{"message": "Buy signal on {{ticker}} at {{close}}"}')
+alertcondition(sell, title="Sell Signal", message='{"message": "Sell signal on {{ticker}} at {{close}}"}')
